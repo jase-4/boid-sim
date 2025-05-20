@@ -1,0 +1,294 @@
+#ifndef BOID_HPP
+#define BOID_HPP
+
+
+#include <glm/glm.hpp> 
+#include <vector>
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/norm.hpp> 
+#include <glm/gtc/random.hpp>     
+#include <glm/gtc/constants.hpp> // for pi()
+#include <cstdlib> // for rand()
+#include <ctime>   // for time()
+#include <iostream>
+#include <unordered_map>
+
+struct group_parameters {
+    glm::vec3 direction;
+    float bias_val = 0.0f;
+};
+
+struct Boid {
+    glm::vec3 pos;
+    glm::vec3 velo;
+    int group_id = 0;
+
+    Boid(const glm::vec3& p, const glm::vec3& v, const int gi) : pos(p), velo(v), group_id(gi){}
+};
+
+class BoidSim
+{
+public:
+    std::vector<Boid> boids;
+
+    float protected_range = 0.025f;
+    float protected_range_squared = protected_range * protected_range;
+
+    float visual_range = 65.0f;
+    float visual_range_squared = visual_range * visual_range;
+
+    float centering_factor = 0.005f;
+    float matching_factor = 0.015f;
+    float avoid_factor = 0.07f;
+
+    float min_speed = 15.0f;
+    float max_speed = 22.5f;
+
+    float margin = 0.5f;       // start turning earlier
+    float turnfactor = 1.5f;    // smoother wall turns
+
+    float max_bias = 0.03f;
+    float bias_increment = 0.01f;
+
+    int num_scout_groups = 0;
+    std::unordered_map<int, group_parameters> group_bias;
+    
+
+
+    glm::vec3 box_min = glm::vec3(0.0f, 0.0f, 0.0f);
+    glm::vec3 box_max = glm::vec3(50.0f, 50.0f, 50.0f);
+    void update(float dt);
+    void keep_in_bounds(Boid& boid);
+    void handle_scouts(Boid& boid);
+    void init_boids(int num_boids, int max_scouts_per_group);
+    void print_boids();
+    glm::vec3 random_direction();
+    
+    void setup_scout_groups();
+
+    BoidSim(int num_scout_groups);
+    ~BoidSim();
+};
+
+
+void BoidSim::update(float dt){
+    for (Boid& boid : boids){
+        glm::vec3 pos_avg = glm::vec3(0.0);
+        glm::vec3 velo_avg = glm::vec3(0.0);
+        glm::vec3 close = glm::vec3(0.0);
+        float neighboring_boids = 0.0f;
+    
+        for (const Boid& other_boid : boids){
+            if (&boid == &other_boid) continue;
+            glm::vec3 offset = boid.pos - other_boid.pos;
+            float squared_distance = glm::length2(offset);
+    
+            if (squared_distance < visual_range_squared) {
+                if (squared_distance < protected_range_squared) {
+                    close += offset;
+                } else {
+                    pos_avg += other_boid.pos;
+                    velo_avg += other_boid.velo;
+                    neighboring_boids += 1.0f;
+                }
+            }
+        }
+    
+        // --- OUTSIDE the inner loop:
+        if (neighboring_boids > 0){
+            pos_avg = pos_avg / neighboring_boids;
+            velo_avg = velo_avg / neighboring_boids;
+            boid.velo += (pos_avg - boid.pos) * centering_factor;
+            boid.velo += (velo_avg - boid.velo) * matching_factor;
+        }
+    
+        boid.velo += close * avoid_factor;
+    
+        keep_in_bounds(boid);
+        handle_scouts(boid);
+    
+        float speed = glm::length(boid.velo);
+    
+        if (speed < min_speed){
+            boid.velo = (boid.velo / speed) * min_speed;
+        }
+        if (speed > max_speed){
+            boid.velo = (boid.velo / speed) * max_speed;
+        }
+    
+        boid.pos += boid.velo * dt;
+    }
+    
+}
+
+void BoidSim::handle_scouts(Boid& boid) {
+    if (boid.group_id == 0) return;
+
+    auto it = group_bias.find(boid.group_id);
+    if (it != group_bias.end()) {
+        group_parameters& params = it->second;
+        const glm::vec3& bias_dir = params.direction;
+
+        // 1. Adjust group's bias_val based on agreement with bias_dir
+        float dot_product = glm::dot(boid.velo, bias_dir);
+        if (dot_product > 0.0f) {
+            params.bias_val = std::min(max_bias, params.bias_val + bias_increment);
+        } else {
+            params.bias_val = std::max(bias_increment, params.bias_val - bias_increment);
+        }
+
+        // 2. Apply the group's bias to velocity
+        boid.velo = glm::normalize((1.0f - params.bias_val) * boid.velo + params.bias_val * bias_dir);
+    }
+}
+
+
+void BoidSim::keep_in_bounds(Boid& boid) {
+    // For each axis x, y, z
+    if (boid.pos.x < box_min.x + margin) {
+        boid.pos.x = box_min.x + margin; // push back inside
+        boid.velo.x = std::abs(boid.velo.x); // make sure it's moving positive
+    } else if (boid.pos.x > box_max.x - margin) {
+        boid.pos.x = box_max.x - margin;
+        boid.velo.x = -std::abs(boid.velo.x); // make sure it's moving negative
+    }
+
+    if (boid.pos.y < box_min.y + margin) {
+        boid.pos.y = box_min.y + margin;
+        boid.velo.y = std::abs(boid.velo.y);
+    } else if (boid.pos.y > box_max.y - margin) {
+        boid.pos.y = box_max.y - margin;
+        boid.velo.y = -std::abs(boid.velo.y);
+    }
+
+    if (boid.pos.z < box_min.z + margin) {
+        boid.pos.z = box_min.z + margin;
+        boid.velo.z = std::abs(boid.velo.z);
+    } else if (boid.pos.z > box_max.z - margin) {
+        boid.pos.z = box_max.z - margin;
+        boid.velo.z = -std::abs(boid.velo.z);
+    }
+}
+
+
+void BoidSim::init_boids(int num_boids, int max_scouts_per_group) {
+    std::srand(static_cast<unsigned int>(std::time(nullptr))); // seed random
+    int boid_count = 0;
+
+    // Shrink spawn area
+    float spawn_box_shrink = 0.5f;
+    glm::vec3 box_center = (box_min + box_max) * 0.5f;
+    glm::vec3 half_spawn_size = (box_max - box_min) * spawn_box_shrink * 0.5f;
+
+    // Initialize each group's direction
+    for (int g = 1; g <= num_scout_groups; ++g) {  // Group IDs start from 1
+        glm::vec3 random_dir(
+            static_cast<float>(rand()) / RAND_MAX * 2.0f - 1.0f,
+            static_cast<float>(rand()) / RAND_MAX * 2.0f - 1.0f,
+            static_cast<float>(rand()) / RAND_MAX * 2.0f - 1.0f
+        );
+        random_dir = glm::normalize(random_dir);
+
+        group_bias[g] = group_parameters{random_dir, 0.0f};
+    }
+
+    // Initialize boids
+    for (int i = 0; i < num_boids; ++i) {
+        // Random position near center
+        glm::vec3 pos(
+            box_center.x + static_cast<float>(rand()) / RAND_MAX * (2.0f * half_spawn_size.x) - half_spawn_size.x,
+            box_center.y + static_cast<float>(rand()) / RAND_MAX * (2.0f * half_spawn_size.y) - half_spawn_size.y,
+            box_center.z + static_cast<float>(rand()) / RAND_MAX * (2.0f * half_spawn_size.z) - half_spawn_size.z
+        );
+
+        // Assign group
+        int group_id = 0;
+        if (num_scout_groups > 0 && boid_count < num_scout_groups * max_scouts_per_group) {
+            group_id = (boid_count / max_scouts_per_group) + 1;
+        }
+
+        // Direction: use group_bias direction if in a group, random otherwise
+        glm::vec3 dir;
+        if (group_id > 0) {
+            dir = group_bias[group_id].direction;
+        } else {
+            dir = glm::normalize(glm::vec3(
+                static_cast<float>(rand()) / RAND_MAX * 2.0f - 1.0f,
+                static_cast<float>(rand()) / RAND_MAX * 2.0f - 1.0f,
+                static_cast<float>(rand()) / RAND_MAX * 2.0f - 1.0f
+            ));
+        }
+
+        // Random speed between min and max
+        float speed = min_speed + static_cast<float>(rand()) / RAND_MAX * (max_speed - min_speed);
+
+        glm::vec3 velo = dir * speed;
+
+        // Add to boids list
+        boids.push_back(Boid(pos, velo, group_id));
+
+        boid_count++;
+    }
+}
+
+
+
+
+
+void BoidSim::print_boids(){
+    for (size_t i = 0; i < boids.size(); ++i) {
+        const Boid& b = boids[i];
+        std::cout << "Boid " << i << ":\n";
+        std::cout << "  Position: (" << b.pos.x << ", " << b.pos.y << ", " << b.pos.z << ")\n";
+        std::cout << "  Velocity: (" << b.velo.x << ", " << b.velo.y << ", " << b.velo.z << ")\n";
+    }
+
+}
+
+
+glm::vec3 BoidSim::random_direction() {
+    // Random point on the unit sphere
+    float theta = glm::linearRand(0.0f, glm::two_pi<float>()); // angle around Y-axis
+    float phi = glm::linearRand(0.0f, glm::pi<float>());       // angle from top (Z-axis)
+
+    float x = sin(phi) * cos(theta);
+    float y = sin(phi) * sin(theta);
+    float z = cos(phi);
+    auto norm = glm::normalize(glm::vec3(x, y, z));
+
+    std::cout << "  DIRECTION: (" << norm.x << ", " << norm.y << ", " << norm.z << ")\n";
+
+    
+
+    return glm::normalize(glm::vec3(x, y, z));
+}
+void BoidSim::setup_scout_groups() {
+    for (int group_id = 1; group_id <= num_scout_groups; ++group_id) {
+        group_parameters params;
+        params.direction = random_direction();
+        params.bias_val = glm::linearRand(0.001f, 0.5f); // small random bias
+        //params.bias_val = 0.01f ;// small random bias
+        
+        group_bias[group_id] = params;
+    }
+}
+
+
+BoidSim::BoidSim(int num_scout)
+{
+    num_scout_groups = num_scout;
+    setup_scout_groups();
+    std::cout << "HEYYYYYYYYYYYYYYYYYYY\n";
+}
+
+BoidSim::~BoidSim()
+{
+}
+
+
+// glm::vec3 offset = boid.pos - other_boid.pos;
+// if (glm::length2(offset) < visual_range * visual_range) {
+//     // within visual range
+// }
+
+#endif
