@@ -24,13 +24,18 @@
 #include "window.hpp"
 #include "boid.hpp"
 
-#include "boid_sim.hpp"
+#include "../cuda/boid_sim_cuda.hpp"
+
+
 
 Window window;
 
 
+#include "cuda_runtime.h"
+
+
 //#include <cuda_gl_interop.h>
-int boid_num = 100;
+int boid_num = 50000;
 
 
 std::vector<glm::mat4> generate_model_matrices(std::vector<glm::vec3> positions){
@@ -266,6 +271,21 @@ int main()
     //         modelMatrices[i] = model;
     //     }
 
+
+
+
+    // float h_dot_sums[MAX_GROUPS];
+    // int h_dot_counts[MAX_GROUPS];
+
+
+    //BoidSimGPU boid_gpu(boid_num,MAX_GROUPS);
+
+   // boid_gpu.init();
+
+
+
+
+
     unsigned int buffer;
     glGenBuffers(1, &buffer);
     glBindBuffer(GL_ARRAY_BUFFER, buffer);
@@ -302,6 +322,16 @@ int main()
 
     // render loop
     // -----------
+    BoidSimCUDA cuda_boid;
+    cuda_boid.positions_glm = boid_sim.positions;
+    cuda_boid.velocities_glm = boid_sim.velocities;
+    cuda_boid.count = boid_num;
+    cuda_boid.group_ids = std::vector<int>(cuda_boid.count);
+    cuda_boid.init_boid_params();
+    cuda_boid.init_group_ids(4096);
+    cuda_boid.init_group_directions();
+     // init_boid_params();
+
     while (!window.should_close())
     {
         // per-frame time logic
@@ -315,11 +345,17 @@ int main()
 
 
         //boid_sim.update(deltaTime);
-        updateBoidsCUDA(boid_sim.positions.data(),boid_sim.velocities.data(),boid_num);
+       // updateBoidsCUDA(boid_sim.positions.data(),boid_sim.velocities.data(),boid_num,deltaTime);
+        cuda_boid.updateBoidsCUDA(deltaTime);
+        
+
+       
+   
 
         for (int i = 0; i < boid_num; ++i) {
             glm::mat4 model = glm::mat4(1.0f);
-            model = glm::translate(model, boid_sim.positions[i]);
+            model = glm::translate(model, cuda_boid.positions_glm[i]);
+           // model = glm::translate(model, boid_sim.positions[i]);
             model = glm::scale(model, glm::vec3(0.1));
             modelMatrices[i] = model;
         }

@@ -114,6 +114,26 @@
         "xmemory": "cpp",
         "xstddef": "cpp",
         "xtr1common": "cpp",
-        "*.txt": "cpp"
+        "*.txt": "cpp",
+        "bitset": "cpp",
+        "any": "cpp",
+        "cfenv": "cpp",
+        "codecvt": "cpp",
+        "condition_variable": "cpp",
+        "coroutine": "cpp",
+        "csignal": "cpp",
+        "cwctype": "cpp",
+        "filesystem": "cpp",
+        "future": "cpp",
+        "memory_resource": "cpp",
+        "random": "cpp",
+        "ranges": "cpp",
+        "shared_mutex": "cpp",
+        "source_location": "cpp",
+        "span": "cpp",
+        "strstream": "cpp",
+        "typeindex": "cpp",
+        "valarray": "cpp",
+        "variant": "cpp"
     }
 }

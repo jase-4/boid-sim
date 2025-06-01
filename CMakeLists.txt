@@ -20,14 +20,17 @@ include_directories(${CMAKE_SOURCE_DIR}/assets/textures)
 include_directories(${CMAKE_SOURCE_DIR}/shaders)
 
 # Gather source files
-file(GLOB_RECURSE cpu_source_files "${CMAKE_SOURCE_DIR}/src/*.cpp")
-file(GLOB_RECURSE gpu_source_files "${CMAKE_SOURCE_DIR}/src/*.cu")
-file(GLOB_RECURSE gpu_header_files "${CMAKE_SOURCE_DIR}/src/*.cuh")
+file(GLOB_RECURSE cpu_source_files "${CMAKE_SOURCE_DIR}/src/*.cpp"  "${CMAKE_SOURCE_DIR}/cuda/*.cpp" )
+file(GLOB_RECURSE gpu_source_files "${CMAKE_SOURCE_DIR}/src/*.cu" "${CMAKE_SOURCE_DIR}/cuda/*.cu")
+file(GLOB_RECURSE gpu_header_files "${CMAKE_SOURCE_DIR}/src/*.cuh" "${CMAKE_SOURCE_DIR}/cuda/*.cuh")
 #file(GLOB_RECURSE header_files "${CMAKE_SOURCE_DIR}/include/*.hpp")
-file(GLOB_RECURSE header_files "${CMAKE_SOURCE_DIR}/include/*.h" "${CMAKE_SOURCE_DIR}/include/*.hpp")
+file(GLOB_RECURSE header_files "${CMAKE_SOURCE_DIR}/include/*.h" "${CMAKE_SOURCE_DIR}/include/*.hpp" "${CMAKE_SOURCE_DIR}/cuda/*.hpp")
 
 file(GLOB_RECURSE asset_files "${CMAKE_SOURCE_DIR}/assets/textures/*")
 file(GLOB_RECURSE shader_files "${CMAKE_SOURCE_DIR}/shaders/*")
+
+
+
 # Create executable
 add_executable(boid_sim
     ${header_files}
@@ -36,6 +39,9 @@ add_executable(boid_sim
     ${gpu_header_files}
 )
 
+set_target_properties(boid_sim PROPERTIES
+    CUDA_SEPARABLE_COMPILATION ON  # Enable RDC here too
+)
 
 
 # Find packages
